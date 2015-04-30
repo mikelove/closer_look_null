@@ -50,7 +50,7 @@ confounded with comparisons of interest, a naive analysis
 will produce spurious positives in high-throughput genomic datasets,
 for examples. see [Leek et al 2010](http://www.ncbi.nlm.nih.gov/pmc/articles/PMC3880143/).
 
-If we then *sum* the number of genes with small p-values (here, $p < 10^{-4}$)
+If we then *sum* the number of genes with small p-values (here, p < 10^-4)
 from all replications,
 the genes with small p-values from the replications which were confounded with batch
 will skew the total, even if there are many other replications
@@ -85,7 +85,7 @@ during statistical analysis.
 |[6 7 7] vs [4 4 6] |48            |
 
 If we use a more reasonable summary statistics, say the median, then
-we can see that the number of p-values less than $10^{-4}$ for a typical
+we can see that the number of p-values less than 10^-4 for a typical
 replication is not as high as suggested by the mean or the sum.
 
 
@@ -99,7 +99,7 @@ replication is not as high as suggested by the mean or the sum.
 |   |Max.   :337 |Max.   :416 |Max.   :161.0 |Max.   :11167 |
 
 
-Note that the expected number of p-values less than $10^{-4}$ here would
+Note that the expected number of p-values less than 10^-4 here would
 be around 1.
 
 I am not claiming that our method or other methods always exactly
@@ -125,9 +125,10 @@ Improving methods requires an iterative process of methods development and bench
 work, incorporating the good parts from various methods to improve
 performance. For this, we need good methods and good benchmarks.
 
-Here is a link to all the code used to generate these figures and tables.
+This repo contains all the code used to generate these figures and tables.
 
-- link
+* `simulation.R` : contains the scripts for generating p-values
+* `tables_and_figures.Rnw` : contains the code for making figures
 
 Footnote: I attempted to draw the attention of the authors to this issue before
 publication with a simple simulation, which showed loss of Type I error
