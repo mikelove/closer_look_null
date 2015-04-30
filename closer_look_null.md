@@ -6,12 +6,10 @@ the analysis I discuss here. So while I am not at all impartial, I am
 familiar with the analysis being done and the potential pitfalls
 (in fact we performed a similar analysis in our paper).
 
-It is important to study when and how the distributional
-assumptions of parametric models do not match the reality of data.
-We examine outlier diagnostics in our paper, and another paper from the
-Robinson group examines robust modifications to their model. There is still
-likely much room for improvement in methods for RNA-seq analysis,
-however getting the benchmarks right is critical.
+TL/DR: Rocke et al (2015) finds that DESeq2 and edgeR's false 
+positive rates are too high, but is a result of a flawed analysis
+which ignores batch effects among samples from the same
+biological condition.
 
 The central analysis in Rocke et al 2015 is a 2 group comparison of random
 subsets of RNA-seq samples all from the same biological
@@ -22,11 +20,10 @@ the null hypothesis: (# of genes) x (# of simulations) x alpha.
 Methods are then compared based on how far their sum of small p-values
 exceeded the expected number.
 
-This analysis has some flaws though, in
-its construction and in the presentation of results,
-The issues I take with the analysis are: (1) relying on a single, skewed
-summary statistic (the sum, or equivalently, the mean) and
-(2) confounding experimental batches with the comparison of interest.
+The issues I take with the analysis are: 
+
+1. relying on a skewed summary statistic (the sum)
+2. confounding experimental batches with the comparison of interest.
 
 The simulation in Rocke et al relies on the assumption that the
 samples within one biological condition are independent. 
@@ -84,23 +81,23 @@ during statistical analysis.
 |[6 6 7] vs [4 4 6] |53            |
 |[6 7 7] vs [4 4 6] |48            |
 
-If we use a more reasonable summary statistics, say the median, then
+If we use a more reasonable summary statistic, such as the median, then
 we can see that the number of p-values less than 10^-4 for a typical
 replication is not as high as suggested by the mean or the sum.
 
 
-|   |    DESeq2  |    edgeR   |  limma.voom  |   nonzero    |
-|:--|:-----------|:-----------|:-------------|:-------------|
-|   |Min.   :  0 |Min.   :  0 |Min.   :  0.0 |Min.   :11153 |
-|   |1st Qu.:  0 |1st Qu.:  1 |1st Qu.:  0.0 |1st Qu.:11159 |
-|   |Median :  1 |Median :  4 |Median :  0.0 |Median :11161 |
-|   |Mean   : 12 |Mean   : 18 |Mean   :  3.9 |Mean   :11161 |
-|   |3rd Qu.:  9 |3rd Qu.: 15 |3rd Qu.:  1.0 |3rd Qu.:11163 |
-|   |Max.   :337 |Max.   :416 |Max.   :161.0 |Max.   :11167 |
+|    DESeq2  |    edgeR   |  limma.voom  |   nonzero    |
+|:-----------|:-----------|:-------------|:-------------|
+|Min.   :  0 |Min.   :  0 |Min.   :  0.0 |Min.   :11153 |
+|1st Qu.:  0 |1st Qu.:  1 |1st Qu.:  0.0 |1st Qu.:11159 |
+|Median :  1 |Median :  4 |Median :  0.0 |Median :11161 |
+|Mean   : 12 |Mean   : 18 |Mean   :  3.9 |Mean   :11161 |
+|3rd Qu.:  9 |3rd Qu.: 15 |3rd Qu.:  1.0 |3rd Qu.:11163 |
+|Max.   :337 |Max.   :416 |Max.   :161.0 |Max.   :11167 |
 
 
 Note that the expected number of p-values less than 10^-4 here would
-be around 1.
+be around 1.1.
 
 I am not claiming that our method or other methods always exactly
 control Type 1 error, and I want to reaffirm that benchmarks are
@@ -116,7 +113,7 @@ target FDR of 10%, the achieved FDR might be be 15% or 20%, although
 this analysis also did not apparently control for batch effects.
 
 My point is that (1) the sum is not a good summary statistic for these kinds of
-analyses, and plots which show the ful range of the results
+analyses, and plots which show the full range of the results
 are far better at revealing the performance of methods here;
 and (2) that experimental batch should taken into consideration when
 one is trying to use real data to model a null hypothesis situation.
