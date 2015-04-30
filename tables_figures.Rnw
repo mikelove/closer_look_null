@@ -1,0 +1,215 @@
+\documentclass[12pt]{article}
+\usepackage[margin=2cm]{geometry}
+\title{Exploration of 3 ReCount datasets}
+\begin{document}
+
+\maketitle
+
+\tableofcontents
+
+\section{PCA plots}
+
+Below I show that there are strong batch effects in Bottomly and some evidence of batch effect in Cheung. In the following code, I first subset the 3 datasets to a single biological condition (one species, one sex, or one population group). I then make a PCA plot using just the shifted log of normalized counts. I then repeat this whole process using the other group of the biological condition.
+
+For Cheung and Montgomery/Pickrell, we do not have batch information for library preparation or for the day of sequencing, although these samples were likely processed in many batches as there are so many samples. For the data of Cheung, I have tried to find a proxy for batch by using the label of the Illumina machine, which is printed in the FASTQ file in the names of the reads. However this is just an approximation. Some samples on the same machine do tend to cluster, while others do not.
+
+<<options>>=
+options(digits=3, width=100)
+opts_chunk$set(tidy=FALSE, dev='png',
+               fig.width=4, fig.height=4.5, fig.path="figure/rgraphics-",
+               message=FALSE, error=FALSE, warning=FALSE, fig.align="center", dpi=360)
+@ 
+
+<<libsAndData>>=
+files <- c("http://bowtie-bio.sourceforge.net/recount/ExpressionSets/cheung_eset.RData",
+           "http://bowtie-bio.sourceforge.net/recount/ExpressionSets/montpick_eset.RData",
+           "http://bowtie-bio.sourceforge.net/recount/ExpressionSets/bottomly_eset.RData")
+for (file in files) if (!file.exists(basename(file))) download.file(file, basename(file))
+for (file in files) load(basename(file))
+library("DESeq2")
+library("lsr")
+library("Biobase")
+library("ggplot2")
+@ 
+
+<<filter>>=
+bottomly.eset <- bottomly.eset[ rowMeans(exprs(bottomly.eset)) >= 1,]
+bottomly.eset$experiment.number <- factor(bottomly.eset$experiment.number)
+dim(bottomly.eset)
+cheung.eset <- cheung.eset[ rowMeans(as.matrix(exprs(cheung.eset))) >= 1,]
+cheung.batch <- read.delim("cheung_batch.txt", header=FALSE, stringsAsFactors=FALSE)
+cheung.batch$machine <- factor(sapply(strsplit(cheung.batch$V2, ":"), `[`, 1))
+cheung.batch$sub.machine <- factor(sapply(strsplit(as.character(cheung.batch$machine), "_"), `[`, 1))
+cheung.batch$id <- paste0("NA",substr(cheung.batch$V1, 3, 8))
+cheung.eset$machine <- cheung.batch$machine[match(colnames(cheung.eset), cheung.batch$id)]
+cheung.eset$sub.machine <- cheung.batch$sub.machine[match(colnames(cheung.eset), cheung.batch$id)]
+dim(cheung.eset)
+montpick.eset <- montpick.eset[ rowMeans(exprs(montpick.eset)) >= 1,]
+dim(montpick.eset)
+@ 
+
+
+<<shift>>=
+k <- 20
+scale.shift.log <- function(x, k) {
+  sf <- estimateSizeFactorsForMatrix(x)
+  log2( t(t(x) / sf) + k )
+}
+@ 
+
+<<pcaBottomly, cache=TRUE, fig.width=4, fig.height=3.5>>=
+for (i in 1:2) {
+  group <- levels(bottomly.eset$strain)[i]
+  bottomly <- bottomly.eset[,bottomly.eset$strain == group]
+  # just log transform, assign DESeqTransform class for plotPCA method
+  # note: no NB-based transformation here
+  bottomly.se <- DESeqTransform(SummarizedExperiment(assay=scale.shift.log(exprs(bottomly),k),
+                                                     colData=DataFrame(pData(bottomly))))
+  p <- plotPCA(bottomly.se, intgroup="experiment.number") + ggtitle(paste("Bottomly:",group))
+  print(p)
+}
+@ 
+
+\clearpage
+
+<<pcaCheung, cache=TRUE, fig.width=6.5, fig.height=4>>=
+for (i in 1:2) {
+  group <- levels(cheung.eset$gender)[i]
+  cheung <- cheung.eset[,cheung.eset$gender == group]
+  # just log transform, assign DESeqTransform class for plotPCA method
+  # note: no NB-based transformation here
+  cheung.se <- DESeqTransform(SummarizedExperiment(assay=scale.shift.log(as.matrix(exprs(cheung)),k),
+                                                   colData=DataFrame(pData(cheung))))
+  data <- plotPCA(cheung.se, intgroup="machine", returnData=TRUE) 
+  p <- ggplot(data, aes(PC1, PC2, col=machine, shape=machine)) + 
+    scale_shape_manual(values=seq_len(nlevels(cheung.se$machine))) + 
+    geom_point(size=3) + 
+    ggtitle(paste("Cheung:",group)) + 
+    xlab(paste0("PC1: ",100*round(attr(data, "percentVar")[1],2),"% variance")) + 
+    ylab(paste0("PC2: ",100*round(attr(data, "percentVar")[2],2),"% variance"))
+  print(p)
+}
+@ 
+
+\clearpage
+
+<<pcaMont, cache=TRUE, fig.width=4.25, fig.height=3.5>>=
+for (i in 1:2) {
+  group <- levels(montpick.eset$population)[i]
+  mont <- montpick.eset[,montpick.eset$population == group]
+  study <- mont$study[1]
+  # just log transform, assign DESeqTransform class for plotPCA method
+  # note: no NB-based transformation here
+  mont.se <- DESeqTransform(SummarizedExperiment(assay=scale.shift.log(exprs(mont),k),
+                                                 colData=DataFrame(pData(mont))))
+  p <- plotPCA(mont.se, intgroup="population") + ggtitle(paste0(study,": ",group))
+  print(p)
+}
+@ 
+
+
+\section{Permutation sum of p-value distributions}
+
+The following loads in the sum of p-values less than $10^{-4}$ for 200 random permutations.
+The code for this is available in \texttt{simulations.R}.
+
+<<loadSim>>=
+load("results.rda")
+library("reshape")
+@ 
+
+<<plotDist, fig.width=8, fig.height=8>>=
+meltFun <- function(res, group, dataset) {
+  data <- melt(res[,1:3])
+  colnames(data) <- c("method","nDEG")
+  data$group <- group
+  data$dataset <- dataset
+  data
+}
+data <- list()
+data[[1]] <- meltFun(res.b1, "group 1", "Bottomly")
+data[[2]] <- meltFun(res.b2, "group 2", "Bottomly")
+data[[3]] <- meltFun(res.c1, "group 1", "Cheung")
+data[[4]] <- meltFun(res.c2, "group 2", "Cheung")
+data[[5]] <- meltFun(res.m1, "group 1", "Montgomery/Pickrell")
+data[[6]] <- meltFun(res.m2, "group 2", "Montgomery/Pickrell")
+data.df <- do.call(rbind, data)
+ggplot(data.df, aes(method, nDEG)) + geom_violin() + 
+  facet_grid(group ~ dataset) + ylab("# DEG")
+ggplot(data.df, aes(method, nDEG+1)) + geom_violin() + 
+  scale_y_log10() + facet_grid(group ~ dataset) + ylab("# DEG + 1")
+
+@ 
+
+<<bottomlyPlotDist, fig.width=4, fig.height=4>>=
+bottomly.df <- data.df[data.df$group == "group 1" & data.df$dataset == "Bottomly",]
+ggplot(bottomly.df, aes(method, nDEG)) + geom_violin() + ylab("# DEG")
+@ 
+
+\section{Check the arrangement of top permutations by number of DEG}
+
+<<checkPerms>>=
+i <- 1
+bottomly <- bottomly.eset[,bottomly.eset$strain == levels(bottomly.eset$strain)[i]]
+cheung <- cheung.eset[,cheung.eset$gender == levels(cheung.eset$gender)[i]]
+mont <- montpick.eset[,montpick.eset$population == levels(montpick.eset$population)[i]]
+m <- 6
+set.seed(1) # master seed
+nsim <- 200
+seeds <- round(runif(nsim,1,1e6))
+top.seeds <- head(order(-res.b1$DESeq2),10)
+nDEG <- sort(res.b1$DESeq2, decreasing=TRUE)
+perm.details <- data.frame(comparison=character(),nDEG=numeric(), stringsAsFactors=FALSE)
+for (i in seq_along(top.seeds)) {
+  s <- top.seeds[i]
+  set.seed(seeds[s])
+  sub <- sample(ncol(bottomly), m, FALSE)
+  exp.num <- bottomly$experiment.number[sub]
+  perm.format <- paste0("[",paste(sort(exp.num[1:3]),collapse=" "),"] vs [",paste(sort(exp.num[4:6]),collapse=" "),"]")
+  perm.details[i,] <- c(perm.format, nDEG[i])
+}
+colnames(perm.details) <- c("comparison", "number of DEG")
+perm.details
+@ 
+
+\clearpage
+
+\begin{verbatim}
+
+<<permOut, results="asis">>=
+kable(perm.details, format="markdown")
+@ 
+
+\end{verbatim}
+
+\subsection{Mean vs median number of DEG}
+
+\clearpage
+
+\begin{verbatim}
+
+<<meanVsMedian, results="asis">>=
+kable(summary(res.b1[,1:4]), format="markdown")
+@ 
+
+\end{verbatim}
+
+<<summaries>>=
+summary(res.b1)
+summary(res.b2)
+summary(res.c1)
+summary(res.c2)
+summary(res.m1)
+summary(res.m2)
+@ 
+
+
+<<sessInfo, results="asis">>=
+# session info for the PCA plots
+toLatex(sessionInfo())
+
+# session info for the p-value generation
+toLatex(session.info)
+@ 
+
+\end{document}

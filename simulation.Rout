@@ -1,0 +1,332 @@
+
+R version 3.1.2 (2014-10-31) -- "Pumpkin Helmet"
+Copyright (C) 2014 The R Foundation for Statistical Computing
+Platform: x86_64-unknown-linux-gnu (64-bit)
+
+R is free software and comes with ABSOLUTELY NO WARRANTY.
+You are welcome to redistribute it under certain conditions.
+Type 'license()' or 'licence()' for distribution details.
+
+  Natural language support but running in an English locale
+
+R is a collaborative project with many contributors.
+Type 'contributors()' for more information and
+'citation()' on how to cite R or R packages in publications.
+
+Type 'demo()' for some demos, 'help()' for on-line help, or
+'help.start()' for an HTML browser interface to help.
+Type 'q()' to quit R.
+
+[Previously saved workspace restored]
+
+Bioconductor version 3.0 (BiocInstaller 1.16.2), ?biocLite for help
+> library("limma")
+> library("edgeR")
+> library("DESeq2")
+Loading required package: S4Vectors
+Loading required package: stats4
+Loading required package: BiocGenerics
+Loading required package: parallel
+
+Attaching package: ‘BiocGenerics’
+
+The following objects are masked from ‘package:parallel’:
+
+    clusterApply, clusterApplyLB, clusterCall, clusterEvalQ,
+    clusterExport, clusterMap, parApply, parCapply, parLapply,
+    parLapplyLB, parRapply, parSapply, parSapplyLB
+
+The following object is masked from ‘package:limma’:
+
+    plotMA
+
+The following object is masked from ‘package:stats’:
+
+    xtabs
+
+The following objects are masked from ‘package:base’:
+
+    anyDuplicated, append, as.data.frame, as.vector, cbind, colnames,
+    do.call, duplicated, eval, evalq, Filter, Find, get, intersect,
+    is.unsorted, lapply, Map, mapply, match, mget, order, paste, pmax,
+    pmax.int, pmin, pmin.int, Position, rank, rbind, Reduce, rep.int,
+    rownames, sapply, setdiff, sort, table, tapply, union, unique,
+    unlist, unsplit
+
+Loading required package: IRanges
+Loading required package: GenomicRanges
+Loading required package: GenomeInfoDb
+Loading required package: Rcpp
+Loading required package: RcppArmadillo
+> library("splines")
+> library("Biobase")
+Welcome to Bioconductor
+
+    Vignettes contain introductory material; view with
+    'browseVignettes()'. To cite Bioconductor, see
+    'citation("Biobase")', and for packages 'citation("pkgname")'.
+
+> library("BiocParallel")
+> files <- c("http://bowtie-bio.sourceforge.net/recount/ExpressionSets/cheung_eset.RData",
++            "http://bowtie-bio.sourceforge.net/recount/ExpressionSets/montpick_eset.RData",
++            "http://bowtie-bio.sourceforge.net/recount/ExpressionSets/bottomly_eset.RData")
+> for (file in files) if (!file.exists(basename(file))) download.file(file, basename(file))
+> for (file in files) load(basename(file))
+> bottomly.eset <- bottomly.eset[ rowMeans(exprs(bottomly.eset)) >= 1,]
+> dim(bottomly.eset)
+Features  Samples 
+   11175       21 
+> cheung.eset <- cheung.eset[ rowMeans(as.matrix(exprs(cheung.eset))) >= 1,]
+> dim(cheung.eset)
+Features  Samples 
+    9067       41 
+> montpick.eset <- montpick.eset[ rowMeans(exprs(montpick.eset)) >= 1,]
+> dim(montpick.eset)
+Features  Samples 
+    8124      129 
+> 
+> runDESeq2 <- function(e, alpha=1e-4) {
++   dds <- DESeqDataSetFromMatrix(as.matrix(exprs(e)), pData(e), ~1)
++   m <- ncol(e)
++   dds$condition <- factor(rep(1:2,each=m/2))
++   design(dds) <- ~ condition
++   dds <- DESeq(dds, quiet=TRUE)
++   res <- results(dds)
++   sum(res$pvalue < alpha, na.rm=TRUE)
++ }
+> 
+> runEdgeR <- function(e, alpha=1e-4) {
++   m <- ncol(e)
++   condition <- factor(rep(1:2,each=m/2))
++   design <- model.matrix(~ condition)
++   dgel <- DGEList(as.matrix(exprs(e)))
++   dgel <- calcNormFactors(dgel)
++   dgel <- estimateGLMCommonDisp(dgel,design=design)
++   dgel <- estimateGLMTrendedDisp(dgel,design=design)
++   dgel <- estimateGLMTagwiseDisp(dgel,design=design)
++   fit <- glmFit(dgel,design=design)
++   lrt <- glmLRT(fit,coef=2)
++   pvals <- lrt$table$PValue
++   sum(pvals < alpha, na.rm=TRUE)
++ }
+> 
+> runLimmaVoom <- function(e, alpha=1e-4) {
++   m <- ncol(e)
++   condition <- factor(rep(1:2,each=m/2))
++   design <- model.matrix(~ condition)
++   dgel <- DGEList(as.matrix(exprs(e)))
++   dgel <- calcNormFactors(dgel)
++   v <- voom(dgel,design,plot=FALSE)
++   fit <- lmFit(v,design)
++   fit <- eBayes(fit)
++   tt <- topTable(fit,coef=ncol(design),n=nrow(dgel),sort.by="none")
++   pvals <- tt$P.Value
++   sum(pvals < alpha, na.rm=TRUE)
++ }
+> 
+> bottomly1 <- bottomly.eset[,bottomly.eset$strain == levels(bottomly.eset$strain)[1]]
+> bottomly2 <- bottomly.eset[,bottomly.eset$strain == levels(bottomly.eset$strain)[2]]
+> cheung1 <- cheung.eset[,cheung.eset$gender == levels(cheung.eset$gender)[1]]
+> cheung2 <- cheung.eset[,cheung.eset$gender == levels(cheung.eset$gender)[2]]
+> mont1 <- montpick.eset[,montpick.eset$population == levels(montpick.eset$population)[1]]
+> mont2 <- montpick.eset[,montpick.eset$population == levels(montpick.eset$population)[2]]
+> 
+> # subset how many total samples
+> m <- 6
+> 
+> # how many subsets
+> # divide by two: symmetric partitions count once
+> chooseTwoSets <- function(n,m) choose(n,m/2) * choose(n-m/2,m/2) / 2
+> dim(bottomly1)
+Features  Samples 
+   11175       10 
+> chooseTwoSets(ncol(bottomly1), m)
+Samples 
+   2100 
+> dim(cheung1)
+Features  Samples 
+    9067       17 
+> chooseTwoSets(ncol(cheung1), m)
+Samples 
+ 123760 
+> dim(mont1)
+Features  Samples 
+    8124       60 
+> chooseTwoSets(ncol(mont1), m)
+  Samples 
+500638600 
+> 
+> register(MulticoreParam(20))
+> 
+> # master seed
+> set.seed(1)
+> nsim <- 200
+> seeds <- round(runif(nsim,1,1e6))
+> 
+> runAlgos <- function(i, e) {
++   set.seed(seeds[i])
++   sub <- sample(ncol(e), m, FALSE)
++   nz <- rowSums(exprs(e)[,sub]) > 0
++   d <- runDESeq2(e[nz,sub])
++   ed <- runEdgeR(e[nz,sub])
++   v <- runLimmaVoom(e[nz,sub])
++   data.frame(DESeq2=d,edgeR=ed,limma.voom=v,nonzero=sum(nz),subset=paste(sub, collapse=","),stringsAsFactors=FALSE)
++ }
+> 
+> # run within-group comparisons for group 1 then for group 2
+> res.b1 <- bplapply(1:nsim, runAlgos, e=bottomly1)
+> res.b1 <- do.call(rbind, res.b1)
+> res.b2 <- bplapply(1:nsim, runAlgos, e=bottomly2)
+> res.b2 <- do.call(rbind, res.b2)
+> 
+> res.c1 <- bplapply(1:nsim, runAlgos, e=cheung1)
+> res.c1 <- do.call(rbind, res.c1)
+> res.c2 <- bplapply(1:nsim, runAlgos, e=cheung2)
+> res.c2 <- do.call(rbind, res.c2)
+> 
+> res.m1 <- bplapply(1:nsim, runAlgos, e=mont1)
+> res.m1 <- do.call(rbind, res.m1)
+> res.m2 <- bplapply(1:nsim, runAlgos, e=mont2)
+> res.m2 <- do.call(rbind, res.m2)
+> 
+> summary(res.b1) # bottomly
+     DESeq2           edgeR          limma.voom        nonzero     
+ Min.   :  0.00   Min.   :  0.00   Min.   :  0.00   Min.   :11153  
+ 1st Qu.:  0.00   1st Qu.:  1.00   1st Qu.:  0.00   1st Qu.:11159  
+ Median :  1.00   Median :  4.00   Median :  0.00   Median :11161  
+ Mean   : 12.44   Mean   : 18.23   Mean   :  3.89   Mean   :11161  
+ 3rd Qu.:  9.25   3rd Qu.: 15.25   3rd Qu.:  1.00   3rd Qu.:11163  
+ Max.   :337.00   Max.   :416.00   Max.   :161.00   Max.   :11167  
+    subset         
+ Length:200        
+ Class :character  
+ Mode  :character  
+                   
+                   
+                   
+> summary(res.b2) # bottomly
+     DESeq2            edgeR          limma.voom      nonzero     
+ Min.   :  0.000   Min.   :  0.00   Min.   : 0.0   Min.   :11158  
+ 1st Qu.:  0.000   1st Qu.:  1.00   1st Qu.: 0.0   1st Qu.:11164  
+ Median :  1.000   Median :  3.00   Median : 0.0   Median :11165  
+ Mean   :  7.495   Mean   : 11.44   Mean   : 1.4   Mean   :11165  
+ 3rd Qu.:  4.000   3rd Qu.:  9.00   3rd Qu.: 0.0   3rd Qu.:11166  
+ Max.   :126.000   Max.   :151.00   Max.   :35.0   Max.   :11169  
+    subset         
+ Length:200        
+ Class :character  
+ Mode  :character  
+                   
+                   
+                   
+> summary(res.c1) # cheung
+     DESeq2        edgeR          limma.voom       nonzero    
+ Min.   :  1   Min.   :  3.00   Min.   : 0.00   Min.   :9016  
+ 1st Qu.:  7   1st Qu.: 11.00   1st Qu.: 0.00   1st Qu.:9042  
+ Median : 13   Median : 19.50   Median : 0.00   Median :9047  
+ Mean   : 23   Mean   : 28.01   Mean   : 1.08   Mean   :9046  
+ 3rd Qu.: 25   3rd Qu.: 31.00   3rd Qu.: 1.00   3rd Qu.:9052  
+ Max.   :291   Max.   :186.00   Max.   :18.00   Max.   :9061  
+    subset         
+ Length:200        
+ Class :character  
+ Mode  :character  
+                   
+                   
+                   
+> summary(res.c2) # cheung
+     DESeq2           edgeR          limma.voom        nonzero    
+ Min.   :  0.00   Min.   :  2.00   Min.   : 0.000   Min.   :9025  
+ 1st Qu.:  7.00   1st Qu.: 10.00   1st Qu.: 0.000   1st Qu.:9050  
+ Median : 15.00   Median : 19.00   Median : 0.000   Median :9055  
+ Mean   : 34.73   Mean   : 31.43   Mean   : 1.175   Mean   :9053  
+ 3rd Qu.: 39.00   3rd Qu.: 38.25   3rd Qu.: 1.000   3rd Qu.:9059  
+ Max.   :358.00   Max.   :217.00   Max.   :24.000   Max.   :9065  
+    subset         
+ Length:200        
+ Class :character  
+ Mode  :character  
+                   
+                   
+                   
+> summary(res.m1) # montgomery
+     DESeq2          edgeR         limma.voom       nonzero    
+ Min.   : 0.00   Min.   : 0.00   Min.   : 0.00   Min.   :7943  
+ 1st Qu.: 2.00   1st Qu.: 5.00   1st Qu.: 0.00   1st Qu.:8044  
+ Median : 6.00   Median : 8.50   Median : 0.00   Median :8082  
+ Mean   :10.22   Mean   :13.47   Mean   : 0.99   Mean   :8070  
+ 3rd Qu.:12.00   3rd Qu.:16.00   3rd Qu.: 1.00   3rd Qu.:8100  
+ Max.   :79.00   Max.   :93.00   Max.   :13.00   Max.   :8118  
+    subset         
+ Length:200        
+ Class :character  
+ Mode  :character  
+                   
+                   
+                   
+> summary(res.m2) # montgomery
+     DESeq2          edgeR         limma.voom      nonzero    
+ Min.   : 0.00   Min.   : 0.00   Min.   :0.00   Min.   :8102  
+ 1st Qu.: 4.00   1st Qu.: 8.00   1st Qu.:0.00   1st Qu.:8114  
+ Median : 9.00   Median :13.00   Median :0.00   Median :8116  
+ Mean   :13.04   Mean   :16.53   Mean   :0.66   Mean   :8116  
+ 3rd Qu.:18.00   3rd Qu.:21.00   3rd Qu.:1.00   3rd Qu.:8118  
+ Max.   :77.00   Max.   :84.00   Max.   :5.00   Max.   :8122  
+    subset         
+ Length:200        
+ Class :character  
+ Mode  :character  
+                   
+                   
+                   
+> 
+> (session.info <- sessionInfo())
+R version 3.1.2 (2014-10-31)
+Platform: x86_64-unknown-linux-gnu (64-bit)
+
+locale:
+ [1] LC_CTYPE=en_US.UTF-8       LC_NUMERIC=C              
+ [3] LC_TIME=en_US.UTF-8        LC_COLLATE=en_US.UTF-8    
+ [5] LC_MONETARY=en_US.UTF-8    LC_MESSAGES=en_US.UTF-8   
+ [7] LC_PAPER=en_US.UTF-8       LC_NAME=C                 
+ [9] LC_ADDRESS=C               LC_TELEPHONE=C            
+[11] LC_MEASUREMENT=en_US.UTF-8 LC_IDENTIFICATION=C       
+
+attached base packages:
+ [1] splines   parallel  stats4    stats     graphics  grDevices utils    
+ [8] datasets  methods   base     
+
+other attached packages:
+ [1] BiocParallel_1.0.3        Biobase_2.26.0           
+ [3] DESeq2_1.6.3              RcppArmadillo_0.4.650.1.1
+ [5] Rcpp_0.11.5               GenomicRanges_1.18.4     
+ [7] GenomeInfoDb_1.2.4        IRanges_2.0.1            
+ [9] S4Vectors_0.4.0           BiocGenerics_0.12.1      
+[11] edgeR_3.8.6               limma_3.22.7             
+[13] devtools_1.7.0            knitr_1.9                
+[15] BiocInstaller_1.16.2     
+
+loaded via a namespace (and not attached):
+ [1] acepack_1.3-3.3      annotate_1.44.0      AnnotationDbi_1.28.2
+ [4] base64enc_0.1-2      BatchJobs_1.6        BBmisc_1.9          
+ [7] brew_1.0-6           checkmate_1.5.1      cluster_2.0.1       
+[10] codetools_0.2-11     colorspace_1.2-6     DBI_0.3.1           
+[13] digest_0.6.8         evaluate_0.5.5       fail_1.2            
+[16] foreach_1.4.2        foreign_0.8-63       formatR_1.0         
+[19] Formula_1.2-0        genefilter_1.48.1    geneplotter_1.44.0  
+[22] ggplot2_1.0.1        grid_3.1.2           gtable_0.1.2        
+[25] Hmisc_3.15-0         iterators_1.0.7      lattice_0.20-30     
+[28] latticeExtra_0.6-26  locfit_1.5-9.1       MASS_7.3-39         
+[31] munsell_0.4.2        nnet_7.3-9           plyr_1.8.1          
+[34] proto_0.3-10         RColorBrewer_1.1-2   reshape2_1.4.1      
+[37] rpart_4.1-9          RSQLite_1.0.0        scales_0.2.4        
+[40] sendmailR_1.2-1      stringr_0.6.2        survival_2.38-1     
+[43] tools_3.1.2          XML_3.98-1.1         xtable_1.7-4        
+[46] XVector_0.6.0       
+> 
+> save(res.b1, res.b2, res.c1, res.c2, res.m1, res.m2, session.info, file="results.rda")
+> 
+> 
+> proc.time()
+     user    system   elapsed 
+29536.644    53.398  2436.989 
