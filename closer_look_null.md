@@ -6,7 +6,7 @@ the analysis I discuss here. So while I am not at all impartial, I am
 familiar with the analysis being done and the potential pitfalls
 (in fact we performed a similar analysis in our paper).
 
-TL/DR: Rocke et al (2015) finds that DESeq2 and edgeR's false 
+**Summary**: Rocke et al (2015) finds that DESeq2 and edgeR's false 
 positive rates are too high, but is a result of a flawed analysis
 which ignores batch effects among samples from the same
 biological condition.
