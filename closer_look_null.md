@@ -6,12 +6,12 @@ the analysis I discuss here. So while I am not at all impartial, I am
 familiar with the analysis being done and the potential pitfalls
 (in fact we performed a similar analysis in our paper).
 
-**Summary**: Rocke et al (2015) finds that DESeq2 and edgeR's false 
+**Summary**: Rocke et al (2015) found that DESeq2 and edgeR's false 
 positive rates are too high, but this is a result of a flawed analysis
 which ignores batch effects among samples from the same
 biological condition.
 
-The central analysis in Rocke et al 2015 is a 2 group comparison of random
+The central analysis in Rocke et al (2015) is a 2 group comparison of random
 subsets of RNA-seq samples all from the same biological
 condition. Over 100 random replications, the number of genes with p-values
 less than alpha (e.g. 10^-4) is summed up over replications
@@ -19,7 +19,8 @@ and compared to the number expected under
 the null hypothesis, which is (# of genes) x (# of simulations) x alpha.
 
 Methods are then compared based on how far their sum of small p-values
-exceeded the expected number.
+exceeded the expected number, and this is supposed to be a measure 
+of their false positive rare (Type I error).
 
 The issues I take with the analysis are: 
 
