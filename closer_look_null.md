@@ -14,9 +14,10 @@ biological condition.
 The central analysis in Rocke et al 2015 is a 2 group comparison of random
 subsets of RNA-seq samples all from the same biological
 condition. Over 100 random replications, the number of genes with p-values
-less than alpha is summed up over replications
+less than alpha (e.g. 10^-4) is summed up over replications
 and compared to the number expected under
-the null hypothesis: (# of genes) x (# of simulations) x alpha.
+the null hypothesis, which is (# of genes) x (# of simulations) x alpha.
+
 Methods are then compared based on how far their sum of small p-values
 exceeded the expected number.
 
