@@ -129,9 +129,10 @@ This repo contains all the code used to generate these figures and tables.
 * `simulation.R` : contains the scripts for generating p-values
 * `tables_and_figures.Rnw` : contains the code for making figures
 
-Footnote: I attempted to draw the attention of the authors to this issue before
-publication with a simple simulation, which showed loss of Type I error
+Footnote: I attempted to draw the attention of the authors to this issue earlier
+with a simple simulation, which showed loss of Type I error
 control even for the basic t-test when ignoring batch effects.
 
 <https://twitter.com/mikelove/status/525016601004081152>
 
+[Rocke et al (2015)](http://biorxiv.org/content/early/2015/04/29/018739)
